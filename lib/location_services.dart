@@ -1,12 +1,12 @@
 import 'dart:convert';
+import 'dart:convert' as convert;
 
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert' as convert;
 
 class LocationService {
   String key = 'AIzaSyCXHcUfFP3mWnb0AU0Cm7BLCk90_qy3LGQ';
-  final apiKey = 'kyklDzA1f9oGHCN3cv2HUHZzqAOI';
+  final apiKey = 'WVpJHfR2zeALMGzHh4TcKA4HnfkH';
 
   Future<String> getPlaceId(String input) async {
     final String url =
@@ -36,23 +36,56 @@ class LocationService {
     return results;
   }
 
-  Future<Map<String, dynamic>> getDirections(
-      String origin, String destination) async {
-    final String url =
-        'https://maps.googleapis.com/maps/api/directions/json?origin=$origin&destination=$destination&key=$key';
+  Future<Map<String, dynamic>> getDirections(Map location) async {
+    const String url =
+        'https://api.maplink.global/trip/v2/calculations?pointsMode=polyline';
 
     try {
-      var response = await http.get(Uri.parse(url));
+      var response = await http.post(
+        Uri.parse(url),
+        body: convert.jsonEncode({
+          "calculationMode": "THE_FASTEST",
+          "points": [
+            {
+              "siteId": "Poin",
+              "latitude": location['origin']['lat'],
+              "longitude": location['origin']['lng'],
+            },
+            {
+              "siteId": "Point Betim",
+              "latitude": location['destination']['lat'],
+              "longitude": location['destination']['lng'],
+            },
+          ]
+        }),
+        headers: {
+          "Authorization": 'Bearer $apiKey',
+          "Content-Type": "application/json",
+        },
+      );
+      print(response);
       var json = convert.jsonDecode(response.body);
       print(json);
       var results = {
-        'bounds_ne': json['routes'][0]['bounds']['northeast'],
-        'bounds_sw': json['routes'][0]['bounds']['southwest'],
-        'start_location': json['routes'][0]['legs'][0]['start_location'],
-        'end_location': json['routes'][0]['legs'][0]['end_location'],
-        'polyline': json['routes'][0]['overview_polyline']['points'],
-        'polyline_decoded': PolylinePoints()
-            .decodePolyline(json['routes'][0]['overview_polyline']['points']),
+        'bounds_ne': {
+          'lat': location['origin']['lat'],
+          'lng': location['origin']['lng'],
+        },
+        'bounds_sw': {
+          'lat': location['destination']['lat'],
+          'lng': location['destination']['lng'],
+        },
+        'start_location': {
+          'lat': location['origin']['lat'],
+          'lng': location['origin']['lng'],
+        },
+        'end_location': {
+          'lat': location['destination']['lat'],
+          'lng': location['destination']['lng'],
+        },
+        'polyline': json['legs'][0]['points'],
+        'polyline_decoded':
+            PolylinePoints().decodePolyline(json['legs'][0]['points']),
       };
       print(results);
       return results;
@@ -63,19 +96,26 @@ class LocationService {
   }
 
   Future<Map<String, dynamic>?> getCoordinates(String address) async {
-    final url = Uri.parse(
-        'https://api.maplink.global/geocode/v1/geocode/json?address=$address');
+    try {
+      final url = Uri.parse(
+          'https://api.maplink.global/geocode/v1/suggestions?q=$address&type=ZIPCODE');
 
-    final response = await http.post(url);
+      final response = await http.get(url, headers: {
+        "Authorization": 'Bearer $apiKey',
+      });
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final location = data['results'][0]['location'];
-      return {
-        'latitude': location['lat'],
-        'longitude': location['lng'],
-      };
-    } else {
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final location = data['results'][0]['address']['mainLocation'];
+        return {
+          'latitude': location['lat'],
+          'longitude': location['lon'],
+        };
+      } else {
+        return null;
+      }
+    } catch (e) {
+      print(e);
       return null;
     }
   }

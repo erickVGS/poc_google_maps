@@ -1,7 +1,8 @@
 import 'dart:async';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_polyline_points/flutter_polyline_points.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:flutter/material.dart';
 import 'package:web_view_maps/location_services.dart';
 
 class MyMapView extends StatefulWidget {
@@ -12,13 +13,13 @@ class MyMapView extends StatefulWidget {
 }
 
 class _MyMapViewState extends State<MyMapView> {
-  Completer<GoogleMapController> _controller = Completer();
+  final Completer<GoogleMapController> _controller = Completer();
 
   final TextEditingController _originController = TextEditingController();
   final TextEditingController _destinationController = TextEditingController();
-  final Set<Marker> markers = Set<Marker>();
-  final Set<Polygon> polygons = Set<Polygon>();
-  final Set<Polyline> polyline = Set<Polyline>();
+  final Set<Marker> markers = <Marker>{};
+  final Set<Polygon> polygons = <Polygon>{};
+  final Set<Polyline> polyline = <Polyline>{};
   List<LatLng> polygonsLatLngs = <LatLng>[];
 
   int polygonIdCounter = 1;
@@ -41,16 +42,21 @@ class _MyMapViewState extends State<MyMapView> {
   @override
   void initState() {
     super.initState();
-    _setMarker(const LatLng(
-      -16.028340,
-      -47.987706,
-    ));
+    _setMarker([
+      const LatLng(
+        -16.028340,
+        -47.987706,
+      )
+    ]);
   }
 
-  void _setMarker(LatLng point) {
+  void _setMarker(List<LatLng> points) {
     setState(() {
-      markers.add(
-        Marker(markerId: MarkerId('marker'), position: point),
+      markers.addAll(
+        [
+          for (int i = 0; i < points.length; i++)
+            Marker(markerId: MarkerId('marker$i'), position: points[i]),
+        ],
       );
     });
   }
@@ -129,7 +135,7 @@ class _MyMapViewState extends State<MyMapView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('POC_GoogleMaps'),
+        title: const Text('POC_GoogleMaps'),
       ),
       body: Column(
         children: [
@@ -138,17 +144,9 @@ class _MyMapViewState extends State<MyMapView> {
               child: Column(
                 children: [
                   TextFormField(
-                    controller: _originController,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(hintText: 'Origem'),
-                    onChanged: (value) {
-                      print(value);
-                    },
-                  ),
-                  TextFormField(
                     controller: _destinationController,
                     textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(hintText: 'Destino'),
+                    decoration: const InputDecoration(hintText: 'Destino'),
                     onChanged: (value) {
                       print(value);
                     },
@@ -158,20 +156,36 @@ class _MyMapViewState extends State<MyMapView> {
             ),
             IconButton(
               onPressed: () async {
-                LocationService().getCoordinates(_originController.text);
+                var result = await LocationService()
+                    .getCoordinates(_destinationController.text);
+
+                print(result);
+
+                var directions = await LocationService().getDirections({
+                  'origin': {
+                    'lat': -15.8311007,
+                    'lng': -48.0582439,
+                  },
+                  'destination': {
+                    'lat': result?['latitude'] ?? 0.0,
+                    'lng': result?['longitude'] ?? 0.0,
+                  },
+                });
                 // var directions = await LocationService().getDirections(
                 //     _originController.text, _destinationController.text);
-                // // var place =
-                // //     await LocationService().getPlace(_searchController.text);
-                // // _goToPlace(place);
-                // _goToPlace(
-                //   directions['start_location']['lat'],
-                //   directions['start_location']['lng'],
-                //   directions['bounds_ne'],
-                //   directions['bounds_sw'],
-                // );
+                // var place =
+                //     await LocationService().getPlace(_searchController.text);
+                // _goToPlace(place);
+                _goToPlace(
+                  originLat: directions['start_location']['lat'],
+                  originLng: directions['start_location']['lng'],
+                  destLat: directions['end_location']['lat'],
+                  destLng: directions['end_location']['lng'],
+                  boundsNe: directions['bounds_ne'],
+                  boundsSw: directions['bounds_sw'],
+                );
 
-                // setPolyline(directions['polyline_decoded']);
+                setPolyline(directions['polyline_decoded']);
               },
               icon: const Icon(Icons.search),
             ),
@@ -221,30 +235,35 @@ class _MyMapViewState extends State<MyMapView> {
     );
   }
 
-  Future<void> _goToPlace(
-    double lat,
-    double lng,
-    Map<String, dynamic> boundsNe,
-    Map<String, dynamic> boundsSw,
-  ) async {
+  Future<void> _goToPlace({
+    required double originLat,
+    required double originLng,
+    required double destLat,
+    required double destLng,
+    required Map<String, dynamic> boundsNe,
+    required Map<String, dynamic> boundsSw,
+  }) async {
     // final double lat = place['geometry']['location']['lat'];
     // final double lng = place['geometry']['location']['lng'];
 
     final GoogleMapController controller = await _controller.future;
     controller.animateCamera(CameraUpdate.newCameraPosition(
       CameraPosition(
-        target: LatLng(lat, lng),
+        target: LatLng(originLat, originLng),
         zoom: 12,
       ),
     ));
 
-    controller.animateCamera(CameraUpdate.newLatLngBounds(
-        LatLngBounds(
-          southwest: LatLng(boundsSw['lat'], boundsSw['lng']),
-          northeast: LatLng(boundsNe['lat'], boundsNe['lng']),
-        ),
-        25));
-    _setMarker(LatLng(lat, lng));
+    // controller.animateCamera(CameraUpdate.newLatLngBounds(
+    //     LatLngBounds(
+    //       southwest: LatLng(boundsSw['lat'], boundsSw['lng']),
+    //       northeast: LatLng(boundsNe['lat'], boundsNe['lng']),
+    //     ),
+    //     25));
+    _setMarker([
+      LatLng(originLat, originLng),
+      LatLng(destLat, destLng),
+    ]);
   }
 
   // Future<void> _goToTheLake() async {
